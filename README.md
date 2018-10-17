@@ -1,7 +1,7 @@
 # Algoim
 ### Algorithms for implicitly defined geometry, level set methods, and Voronoi implicit interface methods.
 
-For a description, examples and install instructions, see [Algoim GitHub page](https://algoim.github.io/)
+For a description, examples and install instructions, see the [Algoim GitHub page](https://algoim.github.io/)
 
 ## Notice
 
