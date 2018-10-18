@@ -1,9 +1,9 @@
-#include <fstream>
-#include "algoim_quad.hpp"
-
 // Examples to demonstrate Algoim's methods for computing high-order accurate quadrature schemes
 // for implicitly defined domains in hyperrectangles. The file contains a single main() routine;
 // compile it as you would for any .cpp file with a main() entry point.
+
+#include <fstream>
+#include "algoim_quad.hpp"
 
 template<int N>
 struct Ellipsoid

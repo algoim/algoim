@@ -1,6 +1,11 @@
 #ifndef ALGOIM_QUAD_H
 #define ALGOIM_QUAD_H
 
+// High-order accurate quadrature algorithms for implicitly defined domains in hyperrectangles, based on the
+// algorithms developed in the paper:
+//  - R. I. Saye, High-Order Quadrature Methods for Implicitly Defined Surfaces and Volumes in Hyperrectangles,
+//   SIAM Journal on Scientific Computing, 37(2), A993-A1019 (2015), http://dx.doi.org/10.1137/140966290
+
 #include <array>
 #include <bitset>
 #include <vector>
@@ -9,11 +14,6 @@
 #include "algoim_interval.hpp"
 #include "algoim_boundingbox.hpp"
 #include "algoim_multiloop.hpp"
-
-// High-order accurate quadrature algorithms for implicitly defined domains in hyperrectangles, based on the
-// algorithms developed in the paper:
-//  - R. I. Saye, High-Order Quadrature Methods for Implicitly Defined Surfaces and Volumes in Hyperrectangles,
-//   SIAM Journal on Scientific Computing, 37(2), A993-A1019 (2015), http://dx.doi.org/10.1137/140966290
 
 namespace Algoim
 {
