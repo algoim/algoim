@@ -5,7 +5,7 @@ For a description, examples and install instructions, see the [Algoim GitHub pag
 
 ## Notice
 
-Algoim Copyright (c) 2018, The Regents of the University of California,
+Algoim Copyright (c) 2020, The Regents of the University of California,
 through Lawrence Berkeley National Laboratory (subject to receipt of any
 required approvals from the U.S. Dept. of Energy). All rights reserved.
 
