@@ -5,7 +5,9 @@
 // and to enable vector expressions when using QD for double-double or quadruple-double precision.
 
 #include <blitz/array.h>
-#include <blitz/tinyvec-et.h> // comment out if using blitz-0.10
+#if __has_include(<blitz/tinyvec-et.h>)
+#include <blitz/tinyvec-et.h> // to support backwards compatibility with blitz-0.9
+#endif
 #include "algoim_real.hpp"
 
 namespace Algoim

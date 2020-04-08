@@ -1,5 +1,5 @@
 #ifndef ALGOIM_BOUNDINGBOX_HPP
-#define AlGOIM_BOUNDINGBOX_HPP
+#define ALGOIM_BOUNDINGBOX_HPP
 
 // Algoim::BoundingBox<T,N>
 

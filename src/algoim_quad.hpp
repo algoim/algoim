@@ -50,7 +50,7 @@ namespace Algoim
             Real dx = x1 - x0;
             for (int step = 0; step < maxsteps; ++step)
             {
-                if ((fpx*(x - x0) - fx)*(fpx*(x - x1) - fx) < 0.0 && fabs(fx) < fabs(dx*fpx)*0.5)
+                if ((fpx*(x - x0) - fx)*(fpx*(x - x1) - fx) < 0.0 && std::abs(fx) < std::abs(dx*fpx)*0.5)
                 {
                     // Step in Newton's method falls within bracket and is less than half the previous step size
                     dx = -fx / fpx;
