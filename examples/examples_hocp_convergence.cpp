@@ -6,6 +6,7 @@
 // ellipsoid, rounded rectangle, rounded cylinder) and a driver "executeTest" for
 // running the test case on a range of grid sizes.
 
+#include <cstring>
 #include <algorithm>
 #include "algoim_hocp.hpp"
 
