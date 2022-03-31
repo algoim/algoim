@@ -1,21 +1,23 @@
-#ifndef ALGOIM_QUAD_H
-#define ALGOIM_QUAD_H
+#ifndef ALGOIM_QUADRATURE_GENERAL_H
+#define ALGOIM_QUADRATURE_GENERAL_H
 
-// High-order accurate quadrature algorithms for implicitly defined domains in hyperrectangles, based on the
-// algorithms developed in the paper:
-//  - R. I. Saye, High-Order Quadrature Methods for Implicitly Defined Surfaces and Volumes in Hyperrectangles,
-//   SIAM Journal on Scientific Computing, 37(2), A993-A1019 (2015), http://dx.doi.org/10.1137/140966290
+/* High-order accurate quadrature algorithms for implicitly defined domains in hyperrectangles, based on the
+   algorithms developed in the paper:
+    - R. I. Saye, High-Order Quadrature Methods for Implicitly Defined Surfaces and Volumes in Hyperrectangles,
+      SIAM Journal on Scientific Computing, 37(2), A993-A1019 (2015),
+      http://dx.doi.org/10.1137/140966290 */
 
 #include <array>
 #include <bitset>
 #include <vector>
 #include <algorithm>
-#include "algoim_gaussquad.hpp"
-#include "algoim_interval.hpp"
-#include "algoim_boundingbox.hpp"
-#include "algoim_multiloop.hpp"
+#include "real.hpp"
+#include "gaussquad.hpp"
+#include "interval.hpp"
+#include "hyperrectangle.hpp"
+#include "multiloop.hpp"
 
-namespace Algoim
+namespace algoim
 {
     namespace detail
     {
@@ -23,17 +25,18 @@ namespace Algoim
         // interval [x0,x1] and the interval brackets a root, then there is only one root and the method is
         // guaranteed to find it (subject to the tolerance and the maximum number of steps).
         template<typename F>
-        bool newtonBisection(const F& f, Real x0, Real x1, Real tol, int maxsteps, Real& root)
+        bool newtonBisection(const F& f, real x0, real x1, real tol, int maxsteps, real& root)
         {
-            Real f0 = f(x0), f1 = f(x1);
+            using std::abs;
+            real f0 = f(x0), f1 = f(x1);
             if ((f0 > 0.0 && f1 > 0.0) || (f0 < 0.0 && f1 < 0.0))
                 return false;
-            if (f0 == Real(0.0))
+            if (f0 == real(0.0))
             {
                 root = x0;
                 return true;
             }
-            if (f1 == Real(0.0))
+            if (f1 == real(0.0))
             {
                 root = x1;
                 return true;
@@ -44,17 +47,17 @@ namespace Algoim
                 std::swap(x0, x1);
 
             // Initial guess is midpoint
-            Real x = (x0 + x1)*0.5;
-            Real fx, fpx;
+            real x = (x0 + x1)*0.5;
+            real fx, fpx;
             f.eval(x, fx, fpx);
-            Real dx = x1 - x0;
+            real dx = x1 - x0;
             for (int step = 0; step < maxsteps; ++step)
             {
-                if ((fpx*(x - x0) - fx)*(fpx*(x - x1) - fx) < 0.0 && std::abs(fx) < std::abs(dx*fpx)*0.5)
+                if ((fpx*(x - x0) - fx)*(fpx*(x - x1) - fx) < 0.0 && abs(fx) < abs(dx*fpx)*0.5)
                 {
                     // Step in Newton's method falls within bracket and is less than half the previous step size
                     dx = -fx / fpx;
-                    Real xold = x;
+                    real xold = x;
                     x += dx;
                     if (xold == x)
                     {
@@ -73,13 +76,13 @@ namespace Algoim
                         return true;
                     }
                 }
-                if (std::abs(dx) < tol)
+                if (abs(dx) < tol)
                 {
                     root = x;
                     return true;
                 }
                 f.eval(x, fx, fpx);
-                if (fx == Real(0.0)) // Got very lucky
+                if (fx == real(0.0)) // Got very lucky
                 {
                     root = x;
                     return true;
@@ -101,24 +104,25 @@ namespace Algoim
         struct OneDimRootFind
         {
             const F& f;
-            mutable TinyVector<Real,N> x;
+            mutable uvector<real,N> x;
             const int dim;
 
-            OneDimRootFind(const F& f, const TinyVector<Real,N>& x, int dim, Real xmin, Real xmax, std::vector<Real>& roots)
+            OneDimRootFind(const F& f, const uvector<real,N>& x, int dim, real xmin, real xmax, std::vector<real>& roots)
                 : f(f), x(x), dim(dim)
             {
-                Real t;
-                if (newtonBisection(*this, xmin, xmax, 1e2*Real(std::numeric_limits<Real>::epsilon())*std::abs(xmax - xmin), 1024, t))
+                using std::abs;
+                real t;
+                if (newtonBisection(*this, xmin, xmax, 1e2*real(std::numeric_limits<real>::epsilon())*abs(xmax - xmin), 1024, t))
                     roots.push_back(t);
             }
 
-            Real operator() (Real t) const
+            real operator() (real t) const
             {
                 x(dim) = t;
                 return f(x);
             }
 
-            void eval(Real t, Real& fx, Real& fpx) const
+            void eval(real t, real& fx, real& fpx) const
             {
                 x(dim) = t;
                 fx = f(x);
@@ -131,7 +135,7 @@ namespace Algoim
         // monotone, but can be set false if this is unknown. Note: this function internally uses Interval
         // arithemtic, and may invalidate prior values of Interval<N>::delta.
         template<typename F, int N>
-        void rootFind(const F& f, const TinyVector<Real,N>& x, int dim, Real xmin, Real xmax, std::vector<Real>& roots, bool isMonotone, int level = 0)
+        void rootFind(const F& f, const uvector<real,N>& x, int dim, real xmin, real xmax, std::vector<real>& roots, bool isMonotone, int level = 0)
         {
             // If the function is known (by the caller) to be monotone or the recursive level is sufficiently deep, call the monotone case.
             if (isMonotone || level >= 4)
@@ -142,18 +146,18 @@ namespace Algoim
 
             // The function is not known to be monotone on the given interval (although in a lot of practical cases it will be). Use
             // interval arithmetic to place bounds on the function's value and gradient.
-            TinyVector<Interval<N>,N> xint;
+            uvector<Interval<N>,N> xint;
             for (int i = 0; i < N; ++i)
             {
                 if (i == dim)
                 {
-                    xint(i) = Interval<N>((xmin + xmax)*0.5, setComponent<Real,N>(Real(0.0), i, Real(1.0)));
+                    xint(i) = Interval<N>((xmin + xmax)*0.5, set_component<real,N>(0.0, i, 1.0));
                     Interval<N>::delta(i) = (xmax - xmin)*0.5;
                 }
                 else
                 {
                     xint(i) = x(i);
-                    Interval<N>::delta(i) = Real(0.0);
+                    Interval<N>::delta(i) = real(0.0);
                 }
             }
     
@@ -163,7 +167,7 @@ namespace Algoim
                 return;
 
             // Test to see if the function's derivative is bounded away from zero on the interval; if it is, then call the monotone case.
-            TinyVector<Interval<N>,N> g = f.grad(xint);
+            uvector<Interval<N>,N> g = f.grad(xint);
             if (g(dim).uniformSign())
             {
                 OneDimRootFind<F,N>(f, x, dim, xmin, xmax, roots);
@@ -223,7 +227,7 @@ namespace Algoim
     {
         std::bitset<N + 2> bits;
         PsiCode() {}
-        PsiCode(const TinyVector<int,N>& sides, int sign)
+        PsiCode(const uvector<int,N>& sides, int sign)
         {
             for (int dim = 0; dim < N; ++dim)
                 bits[dim] = sides(dim) == 1;
@@ -241,11 +245,11 @@ namespace Algoim
             else
                 bits[N] = 0, bits[N+1] = sign == 1;
         }
-        inline int side(int dim) const
+        int side(int dim) const
         {
             return bits[dim] ? 1 : 0;
         }
-        inline int sign() const
+        int sign() const
         {
             return bits[N] ? 0 : (bits[N+1] ? 1 : -1);
         }
@@ -257,13 +261,13 @@ namespace Algoim
     {
         const Phi& phi;
         F& f;
-        const TinyVector<bool,N> free;
+        const uvector<bool,N> free;
         std::array<PsiCode<N>,1 << (N - 1)> psi;
         int psiCount;
-        const BoundingBox<Real,N> xrange;
+        const HyperRectangle<real,N> xrange;
         const int p;
         int e0;
-        TinyVector<Interval<N>,N> xint;
+        uvector<Interval<N>,N> xint;
 
         // Prune the given set of functions by checking for the existence of the interface. If a function is
         // uniformly positive or negative and is consistent with specified sign, it can be removed. If a
@@ -275,7 +279,7 @@ namespace Algoim
             {
                 for (int dim = 0; dim < N; ++dim)
                     if (!free(dim))
-                        xint(dim).alpha = xrange(psi[i].side(dim))(dim);
+                        xint(dim).alpha = xrange.side(psi[i].side(dim))(dim);
                 Interval<N> res = phi(xint);
                 if (res.uniformSign())
                 {
@@ -296,10 +300,10 @@ namespace Algoim
         // Gaussian quadrature for when the domain of integration is determined to be the entire M-dimensional cube.
         void tensorProductIntegral()
         {
-            for (MultiLoop<M> i(0,p); i; ++i)
+            for (MultiLoop<M> i(0,p); ~i; ++i)
             {
-                TinyVector<Real,N> x;
-                Real w = 1.0;
+                uvector<real,N> x;
+                real w = 1.0;
                 for (int dim = 0, k = 0; dim < N; ++dim)
                 {
                     if (free(dim))
@@ -316,13 +320,13 @@ namespace Algoim
         // Given x, valid in all free variables barring e0, root find in the e0 direction on each of the
         // implicit functions, and apply Gaussian quadrature to each segment. Weights are multiplied upon going
         // back up the tree of recursive calls.
-        void evalIntegrand(TinyVector<Real,N> x, Real w) const
+        void evalIntegrand(uvector<real,N> x, real w) const
         {
             // Each thread has its own storage for computing roots. These are not corrupted by the recursive
             // chain of evalIntegrand() calls since each call is in a different templated namespace. Moreover,
             // if using OpenMP tasking, each task is assumed tied and so one thread can only execute "evalIntegrand"
             // from start to end uninterrupted.
-            static thread_local std::vector<Real> roots;
+            static thread_local std::vector<real> roots;
             roots.clear();
 
             if (S)
@@ -334,8 +338,8 @@ namespace Algoim
                 for (int i = 0; i < static_cast<int>(roots.size()); ++i)
                 {
                     x(e0) = roots[i];
-                    TinyVector<Real,N> g = phi.grad(x);
-                    f.evalIntegrand(x, mag(g)/std::abs(g(e0))*w);
+                    uvector<real,N> g = phi.grad(x);
+                    f.evalIntegrand(x, norm(g)/std::abs(g(e0))*w);
                 }
                 return;
             }
@@ -346,7 +350,7 @@ namespace Algoim
             {
                 for (int dim = 0; dim < N; ++dim)
                     if (!free(dim))
-                        x(dim) = xrange(psi[i].side(dim))(dim);
+                        x(dim) = xrange.side(psi[i].side(dim))(dim);
                 // x is now valid in all variables except e0
                 detail::rootFind<Phi,N>(phi, x, e0, xrange.min(e0), xrange.max(e0), roots, M > 1);
             }
@@ -354,7 +358,7 @@ namespace Algoim
             roots.push_back(xrange.max(e0));
 
             // In rare cases, degenerate segments can be found, filter out with a tolerance
-            Real tol = 10.0*Real(std::numeric_limits<Real>::epsilon())*(xrange.max(e0) - xrange.min(e0));
+            real tol = 10.0*real(std::numeric_limits<real>::epsilon())*(xrange.max(e0) - xrange.min(e0));
 
             // Loop over segments of divided interval
             for (int i = 0; i < static_cast<int>(roots.size()) - 1; ++i)
@@ -369,7 +373,7 @@ namespace Algoim
                 {
                     for (int dim = 0; dim < N; ++dim)
                         if (!free(dim))
-                            x(dim) = xrange(psi[j].side(dim))(dim);
+                            x(dim) = xrange.side(psi[j].side(dim))(dim);
                     okay &= phi(x) > 0.0 ? (psi[j].sign() >= 0) : (psi[j].sign() <= 0);
                 }
                 if (!okay)
@@ -378,14 +382,14 @@ namespace Algoim
                 for (int j = 0; j < p; ++j)
                 {
                     x(e0) = roots[i] + (roots[i+1] - roots[i]) * GaussQuad::x(p, j);
-                    Real gw = (roots[i+1] - roots[i]) * GaussQuad::w(p, j);
+                    real gw = (roots[i+1] - roots[i]) * GaussQuad::w(p, j);
                     f.evalIntegrand(x, w * gw);
                 }
             }
         }
 
         // Main calling engine; parameters with underscores are copied upon entry but modified internally in the ctor
-        ImplicitIntegral(const Phi& phi, F& f, const TinyVector<bool,N>& free, const std::array<PsiCode<N>,1 << (N-1)>& psi_, int psiCount_, const BoundingBox<Real,N>& xrange, int p, int level = 0)
+        ImplicitIntegral(const Phi& phi, F& f, const uvector<bool,N>& free, const std::array<PsiCode<N>,1 << (N-1)>& psi_, int psiCount_, const HyperRectangle<real,N>& xrange, int p, int level = 0)
             : phi(phi), f(f), free(free), psi(psi_), psiCount(psiCount_), xrange(xrange), p(p)
         {
             // For the one-dimensional base case, evaluate the bottom-level integral.
@@ -394,7 +398,7 @@ namespace Algoim
                 for (int dim = 0; dim < N; ++dim)
                     if (free(dim))
                         e0 = dim;
-                evalIntegrand(Real(0.0), Real(1.0));
+                evalIntegrand(real(0.0), real(1.0));
                 return;
             }
 
@@ -403,13 +407,13 @@ namespace Algoim
             {
                 if (free(dim))
                 {
-                    xint(dim) = Interval<N>(xrange.midpoint(dim), setComponent<Real,N>(Real(0.0), dim, Real(1.0)));
+                    xint(dim) = Interval<N>(xrange.midpoint(dim), set_component<real,N>(0.0, dim, 1.0));
                     Interval<N>::delta(dim) = xrange.extent(dim)*0.5;
                 }
                 else
                 {
-                    xint(dim) = Interval<N>(Real(0.0)); // xint(dim).delta will be set per psi function
-                    Interval<N>::delta(dim) = Real(0.0);
+                    xint(dim) = Interval<N>(real(0.0)); // xint(dim).delta will be set per psi function
+                    Interval<N>::delta(dim) = real(0.0);
                 }
             }
 
@@ -429,16 +433,16 @@ namespace Algoim
             // This is a modification to the criterion presented in [R. Saye, High-Order Quadrature Methods for Implicitly Defined Surfaces and
             // Volumes in Hyperrectangles, SIAM J. Sci. Comput., Vol. 37, No. 2, pp. A993-A1019, http://dx.doi.org/10.1137/140966290].
             e0 = -1;
-            Real max_quan = 0.0;
+            real max_quan = 0.0;
             for (int dim = 0; dim < N; ++dim)
                 if (!free(dim))
-                    xint(dim).alpha = xrange(psi[0].side(dim))(dim);
-            TinyVector<Interval<N>,N> g = phi.grad(xint);
+                    xint(dim).alpha = xrange.side(psi[0].side(dim))(dim);
+            uvector<Interval<N>,N> g = phi.grad(xint);
             for (int dim = 0; dim < N; ++dim)
             {
                 if (free(dim) && std::abs(g(dim).alpha) > 1.001*g(dim).maxDeviation())
                 {
-                    Real quan = std::abs(g(dim).alpha) * xrange.extent(dim);
+                    real quan = std::abs(g(dim).alpha) * xrange.extent(dim);
                     if (quan > max_quan)
                     {
                         max_quan = quan;
@@ -455,8 +459,8 @@ namespace Algoim
                 // Evaluate gradient in an interval
                 for (int dim = 0; dim < N; ++dim)
                     if (!free(dim))
-                        xint(dim).alpha = xrange(psi[i].side(dim))(dim);
-                TinyVector<Interval<N>,N> g = phi.grad(xint);
+                        xint(dim).alpha = xrange.side(psi[i].side(dim))(dim);
+                uvector<Interval<N>,N> g = phi.grad(xint);
 
                 // Determine if derivative in e0 direction is bounded away from zero.
                 bool directionOkay = e0 != -1 && g(e0).uniformSign();
@@ -465,13 +469,13 @@ namespace Algoim
                     if (level < 16)
                     {
                         // Direction is not a good one, divide the domain into two along the biggest free extent
-                        Real maxext = 0.0;
+                        real maxext = 0.0;
                         int ind = -1;
                         for (int dim = 0; dim < N; ++dim)
                         {
                             if (free(dim))
                             {
-                                Real ext = xrange.extent(dim);
+                                real ext = xrange.extent(dim);
                                 if (ext > maxext)
                                 {
                                     maxext = ext;
@@ -480,27 +484,27 @@ namespace Algoim
                             }
                         }
                         assert(ind >= 0);
-                        Real xmid = xrange.midpoint(ind);
-                        ImplicitIntegral<M,N,Phi,F,S>(phi, f, free, psi, psiCount, BoundingBox<Real,N>(xrange.min(), setComponent(xrange.max(), ind, xmid)), p, level + 1);
-                        ImplicitIntegral<M,N,Phi,F,S>(phi, f, free, psi, psiCount, BoundingBox<Real,N>(setComponent(xrange.min(), ind, xmid), xrange.max()), p, level + 1);
+                        real xmid = xrange.midpoint(ind);
+                        ImplicitIntegral<M,N,Phi,F,S>(phi, f, free, psi, psiCount, HyperRectangle<real,N>(xrange.min(), set_component(xrange.max(), ind, xmid)), p, level + 1);
+                        ImplicitIntegral<M,N,Phi,F,S>(phi, f, free, psi, psiCount, HyperRectangle<real,N>(set_component(xrange.min(), ind, xmid), xrange.max()), p, level + 1);
                         return;
                     }
                     else
                     {
                         // Halt subdivision because we have recursively subdivided too deep; evaluate level set functions at
                         // the centre of box and check compatibility with signs.
-                        TinyVector<Real,N> xpoint = xrange.midpoint();
+                        uvector<real,N> xpoint = xrange.midpoint();
                         bool okay = true;
                         for (int j = 0; j < static_cast<int>(psi.size()) && okay; ++j)
                         {
                             for (int dim = 0; dim < N; ++dim)
                                 if (!free(dim))
-                                    xpoint(dim) = xrange(psi[j].side(dim))(dim);
+                                    xpoint(dim) = xrange.side(psi[j].side(dim))(dim);
                             okay &= phi(xpoint) >= 0.0 ? (psi[j].sign() >= 0) : (psi[j].sign() <= 0);
                         }
                         if (okay)
                         {
-                            Real measure = 1.0;
+                            real measure = 1.0;
                             for (int dim = 0; dim < N; ++dim)
                                 if (free(dim))
                                     measure *= xrange.extent(dim);
@@ -523,7 +527,7 @@ namespace Algoim
 
             // Dimension reduction call
             assert(e0 != -1);
-            ImplicitIntegral<M-1,N,Phi,ImplicitIntegral<M,N,Phi,F,S>,false>(phi, *this, setComponent(free, e0, false), newPsi, newPsiCount, xrange, p);
+            ImplicitIntegral<M-1,N,Phi,ImplicitIntegral<M,N,Phi,F,S>,false>(phi, *this, set_component(free, e0, false), newPsi, newPsiCount, xrange, p);
         }
     };
 
@@ -531,7 +535,7 @@ namespace Algoim
     template<int N, typename Phi, typename F, bool S>
     struct ImplicitIntegral<0,N,Phi,F,S>
     {
-        ImplicitIntegral(const Phi&, F&, const TinyVector<bool,N>&, const std::array<PsiCode<N>,1 << (N-1)>&, int, const BoundingBox<Real,N>&, int) {}
+        ImplicitIntegral(const Phi&, F&, const uvector<bool,N>&, const std::array<PsiCode<N>,1 << (N-1)>&, int, const HyperRectangle<real,N>&, int) {}
     };
 
     // QuadratureRule records quadrature points and weights as they are created by ImplicitIntegral
@@ -540,20 +544,20 @@ namespace Algoim
     {
         struct Node
         {
-            TinyVector<Real,N> x;
-            Real w;
-            Node(const TinyVector<Real,N>& x, Real w) : x(x), w(w) {}
+            uvector<real,N> x;
+            real w;
+            Node(const uvector<real,N>& x, real w) : x(x), w(w) {}
         };
         std::vector<Node> nodes;
 
         // evalIntegrand records quadrature nodes when it is invoked by ImplicitIntegral
-        void evalIntegrand(const TinyVector<Real,N>& x, Real w)
+        void evalIntegrand(const uvector<real,N>& x, real w)
         {
             nodes.push_back({x, w});
         }
 
         // Evaluate an integral applied to a given functional
-        template<typename F, typename R = typename std::result_of<F(const TinyVector<Real,N>&)>::type>
+        template<typename F, typename R = typename std::result_of<F(const uvector<real,N>&)>::type>
         R operator()(const F& f) const
         {
             R sum = 0;
@@ -563,9 +567,9 @@ namespace Algoim
         }
 
         // Sum of weights, i.e., the measure of the integrated domain
-        Real sumWeights() const
+        real sumWeights() const
         {
-            Real sum = 0;
+            real sum = 0;
             for (const auto& pt : nodes)
                 sum += pt.w;
             return sum;
@@ -619,12 +623,12 @@ namespace Algoim
        quadrature schemes. Specifically,
        - phi is a user-defined function object which evaluates the level set function and its gradient. It
          must implement both
-           template<typename T> operator() (const blitz::TinyVector<T,N>& x) const
+           template<typename T> operator() (const algoim::uvector<T,N>& x) const
          and
-           template<typename T> grad(const blitz::TinyVector<T,N>& x) const
-         In the simplest case, T = Real (= double) and the role of phi is to simply evaluate the level set
+           template<typename T> grad(const algoim::uvector<T,N>& x) const
+         In the simplest case, T = real (= double) and the role of phi is to simply evaluate the level set
          function (e.g., return x(0)*x(0) + x(1)*x(1) - 1; for a unit circle) and its gradient (e.g., return
-         blitz::TinyVector<double,2>(2.0*x(0), 2.0*x(1));). However, it is crucial that these two member
+         algoim::uvector<double,2>(2.0*x(0), 2.0*x(1));). However, it is crucial that these two member
          functions be templated on T in order to enable a certain kind of interval arithmetic, similar to
          automatic differentiation. In essence, the interval arithmetic automatically computes a first-order
          Taylor series (with bounded remainder) of the given level set function, and uses that to make
@@ -649,22 +653,22 @@ namespace Algoim
          1 <= qo && qo <= 10.
     */
     template<int N, typename F>
-    QuadratureRule<N> quadGen(const F& phi, const BoundingBox<Real,N>& xrange, int dim, int side, int qo)
+    QuadratureRule<N> quadGen(const F& phi, const HyperRectangle<real,N>& xrange, int dim, int side, int qo)
     {
         QuadratureRule<N> q;
         std::array<PsiCode<N>,1 << (N - 1)> psi;
-        TinyVector<bool,N> free = true;
+        uvector<bool,N> free = true;
         if (0 <= dim && dim < N)
         {
             // Volume integral for one of the sides of a hyperrectangle (in dimensions N - 1)
             assert(side == 0 || side == 1);
-            psi[0] = PsiCode<N>(setComponent<int,N>(0, dim, side), -1);
+            psi[0] = PsiCode<N>(set_component<int,N>(0, dim, side), -1);
             free(dim) = false;
             ImplicitIntegral<N-1,N,F,QuadratureRule<N>,false>(phi, q, free, psi, 1, xrange, qo);
             // The quadrature method is given a restricted level set function to work with, but does not actually
             // initialise the dim-th component of each quadrature node's position. Do so now.
             for (auto& node : q.nodes)
-                node.x(dim) = xrange(side)(dim);
+                node.x(dim) = xrange.side(side)(dim);
         }
         else if (dim == N)
         {
@@ -680,6 +684,6 @@ namespace Algoim
         }
         return q;
     }
-} // namespace Algoim
+} // namespace algoim
 
 #endif

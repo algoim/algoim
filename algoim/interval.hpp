@@ -1,13 +1,17 @@
 #ifndef ALGOIM_INTERVAL_HPP
 #define ALGOIM_INTERVAL_HPP
 
-// Algoim::Interval<N> to compute first-order Taylor series with bounded remainder
+// algoim::Interval<N> methods which compute first-order Taylor series with bounded remainder.
+// These methods are based on those described in the paper
+//    R. I. Saye, High-Order Quadrature Methods for Implicitly Defined Surfaces and Volumes
+//    in Hyperrectangles,SIAM Journal on Scientific Computing, 37(2), A993-A1019 (2015),
+//    http://dx.doi.org/10.1137/140966290
 
-#include "algoim_real.hpp"
-#include "algoim_blitzinc.hpp"
-#include "algoim_utility.hpp"
+#include "real.hpp"
+#include "uvector.hpp"
+#include "utility.hpp"
 
-namespace Algoim
+namespace algoim
 {
     /* Interval arithmetic using a first-order Taylor series with remainder. A function's range of attainable values is
        evaluated as
@@ -35,24 +39,24 @@ namespace Algoim
     template<int N>
     struct Interval
     {
-        Real alpha;
-        TinyVector<Real,N> beta;
-        Real eps;
+        real alpha;
+        uvector<real,N> beta;
+        real eps;
 
-        // Default constructor is the zero function
+        // Default constructor corresponds to the zero function
         Interval() : alpha(0.0), beta(0.0), eps(0.0) {}
 
         // Constructor for a constant
-        explicit Interval(Real alpha) : alpha(alpha), beta(0.0), eps(0.0) {}
+        explicit Interval(real alpha) : alpha(alpha), beta(0.0), eps(0.0) {}
 
         // Constructor for the linear function f(y) = alpha + beta.y
-        explicit Interval(Real alpha, const TinyVector<Real,N>& beta) : alpha(alpha), beta(beta), eps(0.0) {}
+        explicit Interval(real alpha, const uvector<real,N>& beta) : alpha(alpha), beta(beta), eps(0.0) {}
 
         // Constructor with all parameters given
-        explicit Interval(Real alpha, const TinyVector<Real,N>& beta, Real eps) : alpha(alpha), beta(beta), eps(eps) {}
+        explicit Interval(real alpha, const uvector<real,N>& beta, real eps) : alpha(alpha), beta(beta), eps(eps) {}
 
         // Assignment from a constant
-        Interval& operator=(Real alpha)
+        Interval& operator=(real alpha)
         {
             this->alpha = alpha;
             beta = 0.0;
@@ -64,7 +68,7 @@ namespace Algoim
         Interval& operator=(const Interval& other)
         {
             // Shouldn't need this, but if not done manually (i.e., cannot use "= default;"), Intel compiler
-            // icpc 15 has uninitialised memory problem when combined with TinyVector expression templates
+            // icpc 15 has uninitialised memory problem
             alpha = other.alpha;
             beta = other.beta;
             eps = other.eps;
@@ -73,11 +77,12 @@ namespace Algoim
 
         // Maximum deviation of the interval's values from its value at the centre of the interval, i.e.,
         // place bounds on the linear plus remainder term.
-        Real maxDeviation() const
+        real maxDeviation() const
         {
-            Real b = eps;
+            using std::abs;
+            real b = eps;
             for (int dim = 0; dim < N; ++dim)
-                b += std::abs(beta(dim)) * delta(dim);
+                b += abs(beta(dim)) * delta(dim);
             return b;
         }
 
@@ -88,7 +93,7 @@ namespace Algoim
         }
 
         // Addition by a constant
-        Interval& operator+=(Real c)
+        Interval& operator+=(real c)
         {
             alpha += c;
             return *this;
@@ -104,7 +109,7 @@ namespace Algoim
         }
 
         // Negation by a constant
-        Interval& operator-=(Real c)
+        Interval& operator-=(real c)
         {
             alpha -= c;
             return *this;
@@ -121,25 +126,27 @@ namespace Algoim
         }
 
         // Multiplication by a constant
-        Interval& operator*=(Real c)
+        Interval& operator*=(real c)
         {
+            using std::abs;
             alpha *= c;
             beta *= c;
-            eps *= std::abs(c);
+            eps *= abs(c);
             return *this;
         }
 
         // Multiplication by another Interval
         Interval& operator*=(const Interval& rhs)
         {
+            using std::abs;
             // This interval's function is:     (*this)(y) = alpha + beta . y + [-eps, eps]
             // The rhs's interval's function is:    rhs(y) = rhs.alpha + rhs.beta . y + [-rhs.eps, rhs.eps]
             // The product of the two functions takes the form
             //   (*this * rhs)(y) = alpha*rhs.alpha + (alpha*rhs.beta + rhs.alpha*beta).y + (beta . y)(rhs.beta . y) + [-eps, eps]*(rhs.alpha + rhs.beta . y) + [-rhs.eps, rhs.eps]*(alpha + beta . y) + [-eps,eps] * [-rhs.eps,rhs.eps]
-            Real ell_this = maxDeviation();
-            Real ell_rhs = rhs.maxDeviation();
+            real ell_this = maxDeviation();
+            real ell_rhs = rhs.maxDeviation();
             // "Reverse ordering" so old values are not prematurely overwritten; this works even if &rhs == this.
-            eps = ell_this * ell_rhs + std::abs(alpha) * rhs.eps + std::abs(rhs.alpha) * eps;
+            eps = ell_this * ell_rhs + abs(alpha) * rhs.eps + abs(rhs.alpha) * eps;
             for (int dim = 0; dim < N; ++dim)
                 beta(dim) = alpha * rhs.beta(dim) + rhs.alpha * beta(dim);
             alpha *= rhs.alpha;
@@ -147,37 +154,39 @@ namespace Algoim
         }
 
         // Division by a constant, presumed != 0
-        Interval& operator/=(Real c)
+        Interval& operator/=(real c)
         {
+            using std::abs;
             alpha /= c;
             beta /= c;
-            eps /= std::abs(c);
+            eps /= abs(c);
             return *this;
         }
 
         // Division by another interval
         Interval& operator/=(const Interval& rhs)
         {
-            Real rhsxinv = 1.0 / rhs.alpha;
-            Real tau = rhs.maxDeviation()*std::abs(rhsxinv);
+            using std::abs;
+            real rhsxinv = 1.0 / rhs.alpha;
+            real tau = rhs.maxDeviation()*abs(rhsxinv);
             if (tau >= 1.0)
                 throw std::domain_error("Unable to perform operator/= with supplied argument");
-            Real r = sqr(tau)/((1.0 - tau)*sqr(1.0 - tau));
-            Real bnum = maxDeviation();
-            eps = (std::abs(alpha*rhsxinv)*rhs.eps + (std::abs(alpha) + bnum)*r + bnum*tau + eps) * std::abs(rhsxinv);
+            real r = util::sqr(tau)/util::cube(1.0 - tau);
+            real bnum = maxDeviation();
+            eps = (abs(alpha*rhsxinv)*rhs.eps + (abs(alpha) + bnum)*r + bnum*tau + eps) * abs(rhsxinv);
             for (int dim = 0; dim < N; ++dim)
-                beta(dim) = beta(dim)*rhsxinv - alpha*rhs.beta(dim)*sqr(rhsxinv);
+                beta(dim) = beta(dim)*rhsxinv - alpha*rhs.beta(dim)*util::sqr(rhsxinv);
             alpha *= rhsxinv;
             return *this;
         }
 
         // If the interval's values are uniformly positive or negative, returns +1 or -1, respectively. If
         // the values cannot be guaranteed to have uniform sign, returns 0. Internally, this function uses
-        // a small tolerance based on machine precision, so that, for example, x -> x has uniform sign on
-        // the interval [0,1]. The function x -> 0 is declared to have sign 0.
+        // a small tolerance based on machine precision, so that, e.g., x -> x has uniform sign on the
+        // interval [0,1]. The function x -> 0 is declared to have sign 0.
         int sign() const
         {
-            Real x = (Real(1.0) - Real(10.0)*Real(std::numeric_limits<Real>::epsilon()))*maxDeviation();
+            real x = (real(1.0) - real(10.0)*real(std::numeric_limits<real>::epsilon()))*maxDeviation();
             if (alpha > x)
                 return 1;
             else if (alpha < -x)
@@ -193,19 +202,19 @@ namespace Algoim
         }
 
         // Half-width of interval calculations, across all dimensions
-        static TinyVector<Real,N>& delta()
+        static uvector<real,N>& delta()
         {
             // thread_local to allow different threads to perform separate chains of Interval arithmetic.
             // Originally, delta was a static member variable of Interval<N> but GCC has compiler bugs 
             // concerning thread_local variables, possibly related to 
             // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=81880. Changed to a static member function 
             // instead.
-            static thread_local TinyVector<Real,N> d{};
+            static thread_local uvector<real,N> d{};
             return d;
         }
 
         // Half-width of interval calculations, for a specific dimension
-        static Real& delta(int dim)
+        static real& delta(int dim)
         {
             return delta()(dim);
         }
@@ -220,13 +229,13 @@ namespace Algoim
     }
 
     template<int N>
-    Interval<N> operator+(Interval<N> alpha, Real y)
+    Interval<N> operator+(Interval<N> alpha, real y)
     {
         return alpha += y;
     }
 
     template<int N>
-    Interval<N> operator+(Real alpha, Interval<N> y)
+    Interval<N> operator+(real alpha, Interval<N> y)
     {
         return y += alpha;
     }
@@ -238,13 +247,13 @@ namespace Algoim
     }
 
     template<int N>
-    Interval<N> operator-(Interval<N> alpha, Real y)
+    Interval<N> operator-(Interval<N> alpha, real y)
     {
         return alpha -= y;
     }
 
     template<int N>
-    Interval<N> operator-(Real alpha, Interval<N> y)
+    Interval<N> operator-(real alpha, Interval<N> y)
     {
         y *= -1.0;
         return y += alpha;
@@ -257,13 +266,13 @@ namespace Algoim
     }
 
     template<int N>
-    Interval<N> operator*(Interval<N> alpha, Real y)
+    Interval<N> operator*(Interval<N> alpha, real y)
     {
         return alpha *= y;
     }
 
     template<int N>
-    Interval<N> operator*(Real alpha, Interval<N> y)
+    Interval<N> operator*(real alpha, Interval<N> y)
     {
         return y *= alpha;
     }
@@ -275,16 +284,16 @@ namespace Algoim
     }
 
     template<int N>
-    Interval<N> operator/(Interval<N> alpha, Real y)
+    Interval<N> operator/(Interval<N> alpha, real y)
     {
         return alpha /= y;
     }
 
     // Streaming operator for inspection
     template<int N>
-    std::ostream& operator<<(std::ostream& o, const Interval<N>& alpha)
+    std::ostream& operator<< (std::ostream& o, const Interval<N>& alpha)
     {
-        return o << "Interval<" << N << ">(" << alpha.alpha << ", " << alpha.beta << ", " << alpha.eps << ")";
+        return o << "Interval<" << N << ">(" << alpha.alpha << ", " << alpha.beta << ", " << alpha.eps << ')';
     }
 
     // Various unary function evaluations of Interval objects
@@ -292,72 +301,89 @@ namespace Algoim
     template<int N>
     Interval<N> sin(const Interval<N>& i)
     {
-        Real c = cos(i.alpha);
-        return Interval<N>(sin(i.alpha), c * i.beta, std::abs(c)*i.eps + 0.5*sqr(i.maxDeviation()));
+        using std::sin;
+        using std::cos;
+        using std::abs;
+        real c = cos(i.alpha);
+        return Interval<N>(sin(i.alpha), c * i.beta, abs(c)*i.eps + 0.5*util::sqr(i.maxDeviation()));
     }
 
     template<int N>
     Interval<N> cos(const Interval<N>& i)
     {
-        Real s = -sin(i.alpha);
-        return Interval<N>(cos(i.alpha), s * i.beta, std::abs(s)*i.eps + 0.5*sqr(i.maxDeviation()));
+        using std::sin;
+        using std::cos;
+        using std::abs;
+        real s = -sin(i.alpha);
+        return Interval<N>(cos(i.alpha), s * i.beta, abs(s)*i.eps + 0.5*util::sqr(i.maxDeviation()));
     }
 
     template<int N>
     Interval<N> sqrt(const Interval<N>& i)
     {
-        Real b = i.maxDeviation();
+        using std::sqrt;
+        real b = i.maxDeviation();
         if (b > i.alpha)
             throw std::domain_error("Unable to compute sqrt() with supplied argument");
-        Real sqrtx = sqrt(i.alpha);
-        Real sqrtxinv = 1.0 / sqrtx;
-        Real C = 0.25/((i.alpha - b)*sqrt(i.alpha - b));
-        return Interval<N>(sqrtx, (0.5*sqrtxinv)*i.beta, 0.5 * C * sqr(b));
+        real sqrtx = sqrt(i.alpha);
+        real sqrtxinv = 1.0 / sqrtx;
+        real C = 0.25/((i.alpha - b)*sqrt(i.alpha - b));
+        return Interval<N>(sqrtx, (0.5*sqrtxinv)*i.beta, 0.5 * C * util::sqr(b));
     }
 
     template<int N>
     Interval<N> exp(const Interval<N>& i)
     {
-        Real ex = exp(i.alpha);
-        Real b = i.maxDeviation();
+        using std::exp;
+        real ex = exp(i.alpha);
+        real b = i.maxDeviation();
         // Bounding (exp(alpha))'' using montonocity and thus argument [i.alpha + b]
-        return Interval<N>(ex, ex * i.beta, ex*i.eps + 0.5 * exp(i.alpha + b) * sqr(b));
+        return Interval<N>(ex, ex * i.beta, ex*i.eps + 0.5 * exp(i.alpha + b) * util::sqr(b));
     }
 
     template<int N>
     Interval<N> cosh(const Interval<N>& z)
     {
-        Real coshz = cosh(z.alpha);
-        Real sinhz = sinh(z.alpha);
-        Real b = z.maxDeviation();
+        using std::sinh;
+        using std::cosh;
+        using std::abs;
+        real coshz = cosh(z.alpha);
+        real sinhz = sinh(z.alpha);
+        real b = z.maxDeviation();
         // Second derivative of cosh(alpha) is cosh(alpha), and is even and monotone increasing for alpha >= 0. Therefore
         // for z.alpha - z.maxDeviation <= alpha <= z.alpha + z.maxDeviation, the maximum value for cosh(alpha) is cosh(abs(z.alpha) + z.maxDeviation)
-        return Interval<N>(coshz, sinhz * z.beta, std::abs(sinhz)*z.eps + 0.5 * cosh(std::abs(z.alpha) + b) * sqr(b));
+        return Interval<N>(coshz, sinhz * z.beta, abs(sinhz)*z.eps + 0.5 * cosh(abs(z.alpha) + b) * util::sqr(b));
     }
 
     template<int N>
     Interval<N> tanh(const Interval<N>& z)
     {
-        Real tanhz = tanh(z.alpha);
-        Real sechzsqr = sqr(1.0/cosh(z.alpha));
+        using std::tanh;
+        using std::cosh;
+        using std::abs;
+        real tanhz = tanh(z.alpha);
+        real sechzsqr = util::sqr(1.0/cosh(z.alpha));
         // The second derivative of tanh(alpha) is -2*tanh(alpha)*sech(alpha)^2, and has maximum absolute value 0.76980035892...
-        return Interval<N>(tanhz, sechzsqr * z.beta, std::abs(sechzsqr)*z.eps + 0.5 * 0.77 * sqr(z.maxDeviation()));
+        return Interval<N>(tanhz, sechzsqr * z.beta, abs(sechzsqr)*z.eps + 0.5 * 0.77 * util::sqr(z.maxDeviation()));
     }
 
-    inline Real sech(Real alpha)
+    inline real sech(real alpha)
     {
-        return 1.0/std::cosh(alpha);
+        using std::cosh;
+        return real(1)/cosh(alpha);
     }
 
     template<int N>
     Interval<N> sech(const Interval<N>& z)
     {
-        Real sechz = sech(z.alpha);
-        Real fprime = -sechz*tanh(z.alpha);
-        TinyVector<Real,N> beta = fprime * z.beta;
+        using std::tanh;
+        using std::abs;
+        real sechz = sech(z.alpha);
+        real fprime = -sechz*tanh(z.alpha);
+        uvector<real,N> beta = fprime * z.beta;
         // The second derivative of sech(alpha) is {sech(alpha)*tanh(alpha)^2 - sech(alpha)^3} and has maximum absolute value 1.0
-        return Interval<N>(sechz, beta, std::abs(fprime)*z.eps + 0.5 * 1.0 * sqr(z.maxDeviation()));
+        return Interval<N>(sechz, beta, abs(fprime)*z.eps + 0.5 * 1.0 * util::sqr(z.maxDeviation()));
     }
-} // namespace Algoim
+} // namespace algoim
 
 #endif

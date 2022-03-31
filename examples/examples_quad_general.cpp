@@ -2,41 +2,44 @@
 // for implicitly defined domains in hyperrectangles. The file contains a single main() routine;
 // compile it as you would for any .cpp file with a main() entry point.
 
+#include <iostream>
+#include <iomanip>
 #include <fstream>
-#include "algoim_quad.hpp"
+#include "quadrature_general.hpp"
 
 template<int N>
 struct Ellipsoid
 {
     template<typename T>
-    T operator() (const blitz::TinyVector<T,N>& x) const
+    T operator() (const algoim::uvector<T,N>& x) const
     {
-        if (N == 2)
+        if constexpr (N == 2)
             return x(0)*x(0) + 4.0*x(1)*x(1) - 1.0;
         else
             return x(0)*x(0) + 4.0*x(1)*x(1) + 9.0*x(2)*x(2) - 1.0;
     }
 
     template<typename T>
-    blitz::TinyVector<T,N> grad(const blitz::TinyVector<T,N>& x) const
+    algoim::uvector<T,N> grad(const algoim::uvector<T,N>& x) const
     {
-        if (N == 2)
-            return blitz::TinyVector<T,N>(2.0*x(0), 8.0*x(1));
+        if constexpr (N == 2)
+            return algoim::uvector<T,N>(2.0*x(0), 8.0*x(1));
         else
-            return blitz::TinyVector<T,N>(2.0*x(0), 8.0*x(1), 18.0*x(2));
+            return algoim::uvector<T,N>(2.0*x(0), 8.0*x(1), 18.0*x(2));
     }
 };
 
+#if ALGOIM_EXAMPLES_DRIVER == 0 || ALGOIM_EXAMPLES_DRIVER == 1
 int main(int argc, char* argv[])
 {
     std::cout << "Algoim Examples - High-order quadrature algorithms for implicitly defined domains\n\n";
     std::cout << std::fixed << std::setprecision(16);
 
-    // "Area of a 2D ellipse using automatic subdivision
+    // Area of a 2D ellipse using automatic subdivision
     {
         std::cout << "Area of a 2D ellipse using automatic subdivision:\n";
         Ellipsoid<2> phi;
-        auto q = Algoim::quadGen<2>(phi, Algoim::BoundingBox<double,2>(-1.1, 1.1), -1, -1, 4);
+        auto q = algoim::quadGen<2>(phi, algoim::HyperRectangle<double,2>(-1.1, 1.1), -1, -1, 4);
         double area = q([](const auto& x) { return 1.0; });
         std::cout << "  computed area = " << area << "\n";
         std::cout << "    (exact area = 1.5707963267948966)\n\n";
@@ -46,7 +49,7 @@ int main(int argc, char* argv[])
     {
         std::cout << "Volume of a 3D ellipsoid using automatic subdivision:\n";
         Ellipsoid<3> phi;
-        auto q = Algoim::quadGen<3>(phi, Algoim::BoundingBox<double,3>(-1.1, 1.1), -1, -1, 4);
+        auto q = algoim::quadGen<3>(phi, algoim::HyperRectangle<double,3>(-1.1, 1.1), -1, -1, 4);
         double volume = q([](const auto& x) { return 1.0; });
         std::cout << "  computed volume = " << volume << "\n";
         std::cout << "    (exact volume = 0.6981317007977318)\n\n";
@@ -61,9 +64,9 @@ int main(int argc, char* argv[])
         double area = 0.0;
         for (int i = 0; i < n; ++i) for (int j = 0; j < n; ++j)
         {
-            blitz::TinyVector<double,2> xmin = {-1.1 + i*dx, -1.1 + j*dx};
-            blitz::TinyVector<double,2> xmax = {-1.1 + i*dx + dx, -1.1 + j*dx + dx};
-            area += Algoim::quadGen<2>(phi, Algoim::BoundingBox<double,2>(xmin, xmax), -1, -1, 4).sumWeights();
+            algoim::uvector<double,2> xmin{-1.1 + i*dx, -1.1 + j*dx};
+            algoim::uvector<double,2> xmax{-1.1 + i*dx + dx, -1.1 + j*dx + dx};
+            area += algoim::quadGen<2>(phi, algoim::HyperRectangle<double,2>(xmin, xmax), -1, -1, 4).sumWeights();
         }
         std::cout << "  computed area = " << area << "\n";
         std::cout << "    (exact area = 1.5707963267948966)\n\n";
@@ -73,7 +76,7 @@ int main(int argc, char* argv[])
     {
         std::cout << "Surface area of a 3D ellipsoid using automatic subdivision:\n";
         Ellipsoid<3> phi;
-        auto q = Algoim::quadGen<3>(phi, Algoim::BoundingBox<double,3>(-1.1, 1.1), 3, -1, 4);
+        auto q = algoim::quadGen<3>(phi, algoim::HyperRectangle<double,3>(-1.1, 1.1), 3, -1, 4);
         double surface_area = q.sumWeights();
         std::cout << "  computed surface area = " << surface_area << "\n";
         std::cout << "    (exact surface area = 4.4008095646649703)\n\n";
@@ -83,11 +86,12 @@ int main(int argc, char* argv[])
     {
         std::cout << "Visualisation of a quadrature scheme in ParaView via XML VTP file:\n";
         Ellipsoid<3> phi;
-        auto q = Algoim::quadGen<3>(phi, Algoim::BoundingBox<double,3>(-1.1, 1.1), -1, -1, 2);
+        auto q = algoim::quadGen<3>(phi, algoim::HyperRectangle<double,3>(-1.1, 1.1), -1, -1, 2);
         std::ofstream f("scheme.vtp");
-        Algoim::outputQuadratureRuleAsVtpXML(q, f);
+        algoim::outputQuadratureRuleAsVtpXML(q, f);
         std::cout << "  scheme.vtp file written, containing " << q.nodes.size() << " quadrature points\n";
     }
 
     return 0;
 }
+#endif

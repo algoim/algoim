@@ -10,7 +10,10 @@
       http://dx.doi.org/10.2140/camcos.2014.9.107
 */
 
-namespace Algoim
+#include "uvector.hpp"
+#include "utility.hpp"
+
+namespace algoim
 {
     namespace detail
     {
@@ -19,7 +22,7 @@ namespace Algoim
         // (modulo permutations). Returns false if and only if a "small" pivot is detected,
         // assuming largest singular value is O(1).
         template<int N>
-        bool newtoncp_gepp(TinyVector<double,N*N>& A, TinyVector<double,N>& b)
+        bool newtoncp_gepp(uvector<double,N*N>& A, uvector<double,N>& b)
         {
             for (int i = 0; i < N; ++i)
             {
@@ -61,7 +64,7 @@ namespace Algoim
         }
     }
 
-    /* Newton's method for the constrained minimum-distance optimisation problem, where:
+    /* Newton's method for the constrained minimum-distance optimisation problem:
         - x: initial guess of the closest point
         - ref: query point for which argmin ||x - ref|| is sought
         - phi: level set function whose zero level set defines the surface
@@ -70,22 +73,22 @@ namespace Algoim
         - maxsteps: maximum number of steps in the iterative method
     */
     template<int N, typename F>
-    int newtonCP(TinyVector<double,N>& x, const TinyVector<double,N>& ref, const F& phi, double r, double tolsqr, int maxsteps)
+    int newtonCP(uvector<double,N>& x, const uvector<double,N>& ref, const F& phi, double r, double tolsqr, int maxsteps)
     {
-        TinyVector<double,N> x0 = x;
+        uvector<double,N> x0 = x;
         double lambda = 0.0;
         for (int step = 1; step <= maxsteps; ++step)
         {
-            TinyVector<double,N> xold = x;
+            uvector<double,N> xold = x;
 
             // Evaluate phi and its derivatives
             double phival = phi(x);
-            TinyVector<double,N> phigrad = phi.grad(x);
-            TinyVector<double,N*(N+1)/2> phiHessian = phi.hessian(x);
+            uvector<double,N> phigrad = phi.grad(x);
+            uvector<double,N*(N+1)/2> phiHessian = phi.hessian(x);
 
             // Since x is on or very near the zero level set of phi, it is unlikely that |nabla(phi)| = 0. If it is,
             // then the closest point problem is ill-posed, so terminate with x being the closest point.
-            double magsqrgrad = magsqr(phigrad);
+            double magsqrgrad = sqrnorm(phigrad);
             if (magsqrgrad < 1e-4*tolsqr)
                 return step;
 
@@ -94,13 +97,13 @@ namespace Algoim
                 lambda = dot(ref - x, phigrad) / magsqrgrad;
 
             // Calculate gradient of functional
-            TinyVector<double,N+1> gradf;
+            uvector<double,N+1> gradf;
             for (int i = 0; i < N; ++i)
                 gradf(i) = x(i) - ref(i) + lambda*phigrad(i);
             gradf(N) = phival;
 
             // Calculate Hessian of functional
-            TinyVector<double,(N+1)*(N+1)> Hf;
+            uvector<double,(N+1)*(N+1)> Hf;
             int k = 0;
             for (int i = 0; i < N; ++i)
             {
@@ -122,8 +125,8 @@ namespace Algoim
                 // Clamp update to ensure do not move too far
                 double msqr = 0.0;
                 for (int i = 0; i < N; ++i)
-                    msqr += sqr(gradf(i));
-                if (msqr > sqr(0.5*r))
+                    msqr += util::sqr(gradf(i));
+                if (msqr > util::sqr(0.5*r))
                     gradf *= 0.5*r/sqrt(msqr);
 
                 // Update
@@ -136,24 +139,24 @@ namespace Algoim
                 // Newton's method failed, since Hessian was detected to be approximately singular. This generally
                 // only occurs when x is (very) near the centre of curvature of the surface. In this case, revert to 
                 // a type of gradient descent
-                TinyVector<double,N> delta1 = (phival/magsqrgrad)*phigrad;
+                uvector<double,N> delta1 = (phival/magsqrgrad)*phigrad;
                 lambda = dot(ref - x, phigrad) / magsqrgrad;
-                TinyVector<double,N> delta2 = x - ref + lambda*phigrad;
+                uvector<double,N> delta2 = x - ref + lambda*phigrad;
                 // Clamp delta2, the tangential direction, necessary when interface undergoes high curvature
-                double msqr = magsqr(delta2);
-                if (msqr > sqr(0.1*r))
+                double msqr = sqrnorm(delta2);
+                if (msqr > util::sqr(0.1*r))
                     delta2 *= 0.1*r/sqrt(msqr);
                 x -= delta1 + delta2;
             }
 
-            if (magsqr<double,N>(x - x0) > sqr(r))
+            if (sqrnorm(x - x0) > util::sqr(r))
             {
                 // Restore x to the last iterate inside the bounding ball
                 x = xold;
                 return -1;
             }
 
-            if (magsqr<double,N>(x - xold) < tolsqr)
+            if (sqrnorm(x - xold) < tolsqr)
 			    return step;
         }
         return -2;
@@ -161,26 +164,26 @@ namespace Algoim
 
     // Simple Newton-style procedure for projecting a point x onto the zero level set of f
     template<int N, typename F>
-    int newtonIso(TinyVector<double,N>& x, const F& f, double tolsqr, int maxsteps)
+    int newtonIso(uvector<double,N>& x, const F& f, double tolsqr, int maxsteps)
     {
         for (int step = 1; step <= maxsteps; ++step)
         {
             // Evaluate f and its gradient
             double val = f(x);
-            TinyVector<double,N> g = f.grad(x);
+            uvector<double,N> g = f.grad(x);
 
             // Compute delta and update
-            double msqr = magsqr(g);
+            double msqr = sqrnorm(g);
             if (msqr > 0.0)
                 g *= -val/msqr;
             x += g;
 
             // Terminate if converged to within tolerance
-            if (magsqr(g) < tolsqr)
+            if (sqrnorm(g) < tolsqr)
                 return step;
         }
         return -1;
     }
-} // namespace Algoim
+} // namespace algoim
 
 #endif

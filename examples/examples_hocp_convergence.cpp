@@ -8,13 +8,14 @@
 
 #include <cstring>
 #include <algorithm>
-#include "algoim_hocp.hpp"
+#include <cassert>
+#include "hocp.hpp"
+#include "utility.hpp"
 
-using blitz::TinyVector;
-using Algoim::sqr;
-using Algoim::mag;
-using Algoim::magsqr;
+using algoim::uvector;
+using algoim::util::sqr;
 #define PI 3.1415926535897932384626433832795
+
 
 /* Each of the following Test structs defines
     - phi(x): the level set function that implicitly-defines the interface
@@ -24,24 +25,24 @@ using Algoim::magsqr;
 template<int N>
 struct SphereTest
 {
-    double phi(const TinyVector<double,N>& x) const
+    double phi(const uvector<double,N>& x) const
     {
         // Although phi is the exact signed distance function to the sphere, it can only be 
         // approximated by the polynomial interpolants
-        return mag(x) - 0.5;
+        return norm(x) - 0.5;
     }
 
-    bool cp(const TinyVector<double,N>& x, double tol, TinyVector<double,N>& cp) const
+    bool cp(const uvector<double,N>& x, double tol, uvector<double,N>& cp) const
     {
-        if (magsqr(x) == 0.0)
+        if (sqrnorm(x) == 0.0)
         {
             cp = 0.0;
             cp(0) = 0.5;
         }
         else
-            cp = (0.5 / mag(x))*x;
+            cp = (0.5 / norm(x))*x;
         // There is only one shock, at the origin
-        return mag(x) < tol;
+        return norm(x) < tol;
     }
 };
 
@@ -49,7 +50,7 @@ struct SphereTest
 template<int N>
 struct CubeTest
 {
-    double phi(const TinyVector<double,N>& x) const
+    double phi(const uvector<double,N>& x) const
     {
         // This function is the signed-distance function to the cube *only inside* the cube; outside the cube it 
         // is not the distance to the zero level set
@@ -59,7 +60,7 @@ struct CubeTest
         return res;
     }
 
-    bool cp(const TinyVector<double,N>& x, double tol, TinyVector<double,N>& cp) const
+    bool cp(const uvector<double,N>& x, double tol, uvector<double,N>& cp) const
     {
         int count = 0;
         for (int i = 0; i < N; ++i)
@@ -81,15 +82,15 @@ struct CubeTest
         double dist = std::numeric_limits<double>::max(), d;
         for (int i = 0; i < N; ++i)
         {
-            TinyVector<double,N> y = x;
+            uvector<double,N> y = x;
             y(i) = -0.5;
-            if ((d = mag<double,N>(x - y)) < dist)
+            if ((d = norm(x - y)) < dist)
             {
                 dist = d;
                 cp = y;
             }
             y(i) = 0.5;
-            if ((d = mag<double,N>(x - y)) < dist)
+            if ((d = norm(x - y)) < dist)
             {
                 dist = d;
                 cp = y;
@@ -108,7 +109,7 @@ struct CubeTest
 // Ellipse with semi-major axis 1/2 and semi-minor axis 1/3 centred at the origin
 struct EllipsoidTest2D
 {
-    std::vector<TinyVector<double,2>> points;
+    std::vector<uvector<double,2>> points;
     static const int nsample = 256;
 
     double a, b;
@@ -121,32 +122,32 @@ struct EllipsoidTest2D
         for (int i = 0; i < nsample; ++i)
         {
             double theta = (i + 0.5) / nsample * 2.0 * PI;
-            points.push_back(TinyVector<double,2>(a*cos(theta), b*sin(theta)));
+            points.push_back(uvector<double,2>(a*cos(theta), b*sin(theta)));
         }
     }
 
-    double phi(const TinyVector<double,2>& x) const
+    double phi(const uvector<double,2>& x) const
     {
         return (1.0 - exp(-1.0*(sqr(x(0) - 0.3) + sqr(x(1) - 0.3))))*(sqrt(sqr(x(0)/a) + sqr(x(1)/b)) - 1.0);
     }
 
     // The functions operator(), grad() and hessian() are used in newtonCP to compute machine-accurate cp(x)
-    double operator() (const TinyVector<double,2>& x) const
+    double operator() (const uvector<double,2>& x) const
     {
         return sqr(x(0)/a) + sqr(x(1)/b) - 1.0;
     }
 
-    TinyVector<double,2> grad(const TinyVector<double,2>& x) const
+    uvector<double,2> grad(const uvector<double,2>& x) const
     {
-        return TinyVector<double,2>(2.0/a*x(0)/a, 2.0/b*x(1)/b);
+        return uvector<double,2>(2.0/a*x(0)/a, 2.0/b*x(1)/b);
     }
 
-    TinyVector<double,3> hessian(const TinyVector<double,2>& x) const
+    uvector<double,3> hessian(const uvector<double,2>& x) const
     {
-        return TinyVector<double,3>(2.0/a/a, 0.0, 2.0/b/b);
+        return uvector<double,3>(2.0/a/a, 0.0, 2.0/b/b);
     }
 
-    bool cp(const TinyVector<double,2>& x, double tol, TinyVector<double,2>& cp) const
+    bool cp(const uvector<double,2>& x, double tol, uvector<double,2>& cp) const
     {
         // Simple linear search on points to find the closest one; could speed this up with kdtree or something else
         // but performance is not of concern for these convergence tests
@@ -154,7 +155,7 @@ struct EllipsoidTest2D
         int ind = -1;
         for (int i = 0; i < nsample; ++i)
         {
-            double d = magsqr<double,2>(points[i] - x);
+            double d = sqrnorm(points[i] - x);
             if (d < mind)
             {
                 mind = d;
@@ -166,7 +167,7 @@ struct EllipsoidTest2D
 
         // Use this as an initial guess to a machine-accurate Newton procedure
         cp = points[ind];
-        int result = Algoim::newtonCP<2,EllipsoidTest2D>(cp, x, *this, 4.0*PI*a/nsample, 1e-30, 30);
+        int result = algoim::newtonCP<2,EllipsoidTest2D>(cp, x, *this, 4.0*PI*a/nsample, 1e-30, 30);
         if (result < 0)
         {
             // We're likely at a perfect curvature singularity (to machine precision). This does not happen in the tests considered here.
@@ -187,7 +188,7 @@ struct EllipsoidTest2D
 // Ellipsoid with semi-principal axes 1/2, 1/3 and 1/2 centred at the origin
 struct EllipsoidTest3D
 {
-    std::vector<TinyVector<double,3>> points;
+    std::vector<uvector<double,3>> points;
     static const int nsample = 256;
 
     double a, b, c;
@@ -202,32 +203,32 @@ struct EllipsoidTest3D
         {
             double theta = (i + 0.5) / nsample * 2.0 * PI;
             double psi = (j + 0.5) / nsample * 2.0 * PI;
-            points.push_back(TinyVector<double,3>(a*cos(theta), b*sin(theta)*cos(psi), c*sin(theta)*sin(psi)));
+            points.push_back(uvector<double,3>(a*cos(theta), b*sin(theta)*cos(psi), c*sin(theta)*sin(psi)));
         }
     }
 
-    double phi(const TinyVector<double,3>& x) const
+    double phi(const uvector<double,3>& x) const
     {
         return (1.0 - exp(-1.0*(sqr(x(0) - 0.3) + sqr(x(1) - 0.3))))*(sqrt(sqr(x(0)/a) + sqr(x(1)/b) + sqr(x(2)/c)) - 1.0);
     }
 
     // The functions operator(), grad() and hessian() are used by newtonCP to compute machine-accurate cp(x)
-    double operator() (const TinyVector<double,3>& x) const
+    double operator() (const uvector<double,3>& x) const
     {
         return sqr(x(0)/a) + sqr(x(1)/b) + sqr(x(2)/c) - 1.0;
     }
 
-    TinyVector<double,3> grad(const TinyVector<double,3>& x) const
+    uvector<double,3> grad(const uvector<double,3>& x) const
     {
-        return TinyVector<double,3>(2.0/a*x(0)/a, 2.0/b*x(1)/b, 2.0/c*x(2)/c);
+        return uvector<double,3>(2.0/a*x(0)/a, 2.0/b*x(1)/b, 2.0/c*x(2)/c);
     }
 
-    TinyVector<double,6> hessian(const TinyVector<double,3>& x) const
+    uvector<double,6> hessian(const uvector<double,3>& x) const
     {
-        return TinyVector<double,6>(2.0/a/a, 0.0, 0.0, 2.0/b/b, 0.0, 2.0/c/c);
+        return uvector<double,6>(2.0/a/a, 0.0, 0.0, 2.0/b/b, 0.0, 2.0/c/c);
     }
 
-    bool cp(const TinyVector<double,3>& x, double tol, TinyVector<double,3>& cp) const
+    bool cp(const uvector<double,3>& x, double tol, uvector<double,3>& cp) const
     {
         // Simple linear search on points to find the closest one; this could be made faster with e.g. kdtree,
         // but performance is not of concern for these convergence tests
@@ -235,7 +236,7 @@ struct EllipsoidTest3D
         int ind = -1;
         for (int i = 0; i < nsample*nsample; ++i)
         {
-            double d = magsqr<double,3>(points[i] - x);
+            double d = sqrnorm(points[i] - x);
             if (d < mind)
             {
                 mind = d;
@@ -247,7 +248,7 @@ struct EllipsoidTest3D
 
         // Use this as an initial guess to a machine-accurate Newton procedure
         cp = points[ind];
-        int result = Algoim::newtonCP<3,EllipsoidTest3D>(cp, x, *this, 8.0*PI*a/nsample, 1e-30, 30);
+        int result = algoim::newtonCP<3,EllipsoidTest3D>(cp, x, *this, 8.0*PI*a/nsample, 1e-30, 30);
         if (result < 0)
         {
             // We're likely at a perfect curvature singularity (to machine precision). This does not happen in the tests considered here.
@@ -269,19 +270,19 @@ struct EllipsoidTest3D
 template<int N>
 struct RoundedPipeTest
 {
-    double phi(const TinyVector<double,N>& x) const
+    double phi(const uvector<double,N>& x) const
     {
-        TinyVector<double,N> x0(0.0), x1(0.0), y(0.0);
+        uvector<double,N> x0(0.0), x1(0.0), y(0.0);
         x0(0) = -0.25; x1(0) = 0.25; y(0) = x(0);
 
-        TinyVector<double,N> c;
+        uvector<double,N> c;
         cp(x, 0.0, c);
 
-        bool inside = mag<double,N>(x - x0) <= 0.25 || mag<double,N>(x - x1) <= 0.25 || (x(0) >= -0.25 && x(0) <= 0.25 && mag<double,N>(x - y) <= 0.25);
-        return inside? -mag<double,N>(x - c) : mag<double,N>(x - c);
+        bool inside = norm(x - x0) <= 0.25 || norm(x - x1) <= 0.25 || (x(0) >= -0.25 && x(0) <= 0.25 && norm(x - y) <= 0.25);
+        return inside? -norm(x - c) : norm(x - c);
     }
 
-    bool cp(const TinyVector<double,N>& x, double tol, TinyVector<double,N>& cp) const
+    bool cp(const uvector<double,N>& x, double tol, uvector<double,N>& cp) const
     {
         if (x(0) >= -0.25 && x(0) <= 0.25)
         {
@@ -304,17 +305,17 @@ struct RoundedPipeTest
         }
         else if (x(0) <= -0.25)
         {
-            TinyVector<double,N> y = x; y(0) += 0.25;
-            cp = (0.25/mag(y))*y;
+            uvector<double,N> y = x; y(0) += 0.25;
+            cp = (0.25/norm(y))*y;
             cp(0) -= 0.25;
-            return mag(y) < tol;
+            return norm(y) < tol;
         }
         else
         {
-            TinyVector<double,N> y = x; y(0) -= 0.25;
-            cp = (0.25/mag(y))*y;
+            uvector<double,N> y = x; y(0) -= 0.25;
+            cp = (0.25/norm(y))*y;
             cp(0) += 0.25;
-            return mag(y) < tol;
+            return norm(y) < tol;
         }
     }
 };
@@ -324,10 +325,10 @@ template<int N, typename Test>
 struct TestFunctor
 {
     const Test& test;
-    const TinyVector<double,N> dx;
-    const TinyVector<double,N> xmin; // xmin = coordinates of grid-point i = 0
-    TestFunctor(const Test& test, const TinyVector<double,N>& dx, const TinyVector<double,N>& xmin) : test(test), dx(dx), xmin(xmin) {}
-    double operator() (const TinyVector<int,N>& i) const
+    const uvector<double,N> dx;
+    const uvector<double,N> xmin; // xmin = coordinates of grid-point i = 0
+    TestFunctor(const Test& test, const uvector<double,N>& dx, const uvector<double,N>& xmin) : test(test), dx(dx), xmin(xmin) {}
+    double operator() (const uvector<int,N>& i) const
     {
         return test.phi(i*dx + xmin);
     }
@@ -345,33 +346,33 @@ template<int N, int Degree, typename Test>
 TestResult executeTest(int n, double domainLen, const Test& test)
 {
     // Determine the type of polynomial to use based on given Degree and dimension N
-    typedef typename Algoim::StencilPoly<N,Degree>::T_Poly Poly;
+    typedef typename algoim::StencilPoly<N,Degree>::T_Poly Poly;
 
     // The domain is [-domainLen/2, domainLen/2] and is discretised with a cell-centered grid with
     // n grid points in each dimension
-    TinyVector<int,N> ext = n;
-    TinyVector<double,N> dx = domainLen/n;
-    TinyVector<double,N> xmin = -0.5*domainLen + 0.5*dx;
+    uvector<int,N> ext = n;
+    uvector<double,N> dx = domainLen/n;
+    uvector<double,N> xmin = -0.5*domainLen + 0.5*dx;
 
     // Create a functor whose purpose is to simulate a n-dimensional scalar array
     TestFunctor<N,Test> functor(test, dx, xmin);
 
     // Find all cells containing the interface and construct the high-order polynomials
-    std::vector<Algoim::detail::CellPoly<N,Poly>> cells;
-    Algoim::detail::createCellPolynomials(ext, functor, dx, false, cells);
+    std::vector<algoim::detail::CellPoly<N,Poly>> cells;
+    algoim::detail::createCellPolynomials(ext, functor, dx, false, cells);
 
     // Using the polynomials, sample the zero level set in each cell to create a cloud of seed points
-    std::vector<TinyVector<double,N>> points;
+    std::vector<uvector<double,N>> points;
     std::vector<int> pointcells;
-    Algoim::detail::samplePolynomials(cells, 2, dx, xmin, points, pointcells);
+    algoim::detail::samplePolynomials(cells, 2, dx, xmin, points, pointcells);
 
     // Construct a k-d tree from the seed points
-    Algoim::KDTree<double,N> kdtree(points);
+    algoim::KDTree<double,N> kdtree(points);
 
     // Pass everything to the closest point computation engine
-    Algoim::ComputeHighOrderCP<N,Poly> hocp(std::numeric_limits<double>::max(), // bandradius = infinity
+    algoim::ComputeHighOrderCP<N,Poly> hocp(std::numeric_limits<double>::max(), // bandradius = infinity
         0.5*max(dx), // amount of overlap, i.e. size of bounding ball in Newton's method
-        sqr(std::max(1.0e-14, pow(blitz::max(dx), Poly::order))), // tolerance to determine convergence
+        sqr(std::max(1.0e-14, pow(max(dx), Poly::order))), // tolerance to determine convergence
         cells, kdtree, points, pointcells, dx, xmin);
 
     // Tolerance for deciding when near a shock
@@ -384,29 +385,29 @@ TestResult executeTest(int n, double domainLen, const Test& test)
     result.local_dist_l1 = result.local_dist_lmax = result.local_cp_l1 = result.local_cp_lmax = 0.0;
     result.global_dist_l1 = result.global_dist_lmax = result.global_cp_l1 = result.global_cp_lmax = 0.0;
 
-    TinyVector<int,4> counts = 0;
+    uvector<int,4> counts = 0;
 
     // Loop over every grid point of domain
-    for (Algoim::MultiLoop<N> i(0, ext); i; ++i)
+    for (algoim::MultiLoop<N> i(0, ext); ~i; ++i)
     {
-        TinyVector<double,N> x = i()*dx + xmin;
-        TinyVector<double,N> cp;
+        uvector<double,N> x = i()*dx + xmin;
+        uvector<double,N> cp;
 
         // Compute the closest point to x
         hocp.compute(x, cp);
 
         // Calculate the exact closest point to x
-        TinyVector<double,N> cpexact;
+        uvector<double,N> cpexact;
         bool atShock = test.cp(x, shockTol, cpexact);
 
         // Error in implied distance function
-        double errdist = mag<double,N>(x - cp) - mag<double,N>(x - cpexact); 
+        double errdist = norm(x - cp) - norm(x - cpexact); 
 
         // Error in closest point function
-        double errcp = mag<double,N>(cpexact - cp); 
+        double errcp = norm(cpexact - cp); 
 
         // If within narrow band, update local error measurements
-        if (mag<double,N>(x - cp) < r_narrowband)
+        if (norm(x - cp) < r_narrowband)
         {
             result.local_dist_l1 += std::abs(errdist);
             result.local_dist_lmax = std::max(result.local_dist_lmax, std::abs(errdist));
@@ -443,11 +444,11 @@ TestResult executeTest(int n, double domainLen, const Test& test)
 template<int N, int Degree, typename Test>
 void runConvergenceTest(int n0, int n1, const Test& test)
 {
-    std::vector<TinyVector<double,8>> results;
+    std::vector<uvector<double,8>> results;
     for (int n = n0, i = 0; n <= n1; n *= 2, ++i)
     {
         TestResult result = executeTest<N,Degree,Test>(n, 1.5, test);
-        results.push_back(TinyVector<double,8>(result.local_dist_l1, result.local_dist_lmax, result.local_cp_l1, result.local_cp_lmax, 
+        results.push_back(uvector<double,8>(result.local_dist_l1, result.local_dist_lmax, result.local_cp_l1, result.local_cp_lmax, 
             result.global_dist_l1, result.global_dist_lmax, result.global_cp_l1, result.global_cp_lmax));
 
         printf("n = %4d : ", n);
@@ -497,6 +498,7 @@ void runTest()
     runConvergenceTest<N,5,Test>(n0, n1, test);
 }
 
+#if ALGOIM_EXAMPLES_DRIVER == 0 || ALGOIM_EXAMPLES_DRIVER == 3
 // Usage: exename N test, where N = 2 or 3, and test = sphere, ellipsoid, cube, pipe
 int main(int argc, char* argv[])
 {
@@ -516,3 +518,4 @@ int main(int argc, char* argv[])
     }
     return 0;
 }
+#endif
