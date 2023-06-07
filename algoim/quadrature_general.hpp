@@ -138,7 +138,7 @@ namespace algoim
         void rootFind(const F& f, const uvector<real,N>& x, int dim, real xmin, real xmax, std::vector<real>& roots, bool isMonotone, int level = 0)
         {
             // If the function is known (by the caller) to be monotone or the recursive level is sufficiently deep, call the monotone case.
-            if (isMonotone || level >= 4)
+            if (isMonotone || level >= 40)
             {
                 OneDimRootFind<F,N>(f, x, dim, xmin, xmax, roots);
                 return;
@@ -593,6 +593,8 @@ namespace algoim
             stream << pt.x(0) << ' ' << pt.x(1) << ' ';
             if (N == 3)
                 stream << pt.x(2) << ' ';
+            else
+                stream << "0.0 ";
         }
         stream << "</DataArray>\n";
         stream << "</Points>\n";

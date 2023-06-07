@@ -425,11 +425,12 @@ namespace algoim
 
         // Compute the 'score' across all dimensions
         template<int N>
-        uvector<real,N> score_estimate(PolySet<N,ALGOIM_M>& phi, uvector<bool,N>& disc)
+        uvector<real,N> score_estimate(PolySet<N,ALGOIM_M>& phi, uvector<bool,N>& has_disc)
         {
             static_assert(N > 1, "score_estimate of practical use only with N > 1");
             using std::abs;
             uvector<real,N> s = 0;
+            has_disc = false;
             // For every phi(i) ...
             for (int i = 0; i < phi.count(); ++i)
             {
@@ -458,7 +459,7 @@ namespace algoim
                 {
                     bernstein::elevatedDerivative(p, k, p_k);
                     auto disc_mask = intersectionMask(p, mask, p_k, mask);
-                    disc(k) = !maskEmpty(disc_mask);
+                    has_disc(k) |= !maskEmpty(disc_mask);
                 }
             }
             return s;
@@ -570,6 +571,8 @@ namespace algoim
                 // Compute score; penalise any directions which likely contain vertical tangents
                 uvector<bool,N> has_disc;
                 uvector<real,N> score = detail::score_estimate(phi, has_disc);
+                //if (max(abs(score)) == 0)
+                //    score(0) = 1.0;
                 assert(max(abs(score)) > 0);
                 score /= 2 * max(abs(score));
                 for (int i = 0; i < N; ++i)
