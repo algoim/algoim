@@ -578,7 +578,7 @@ namespace algoim::bernstein
         return 0.5 - 0.5 * cos(util::pi * i / (P - 1));
     }
 
-    // Methods to compute, and cache, the SVD for Bernstein interpolation based on modified Chebysev nodes
+    // Methods to compute, and cache, the SVD for Bernstein interpolation based on modified Chebyshev nodes
     struct BernsteinVandermondeSVD
     {
         struct SVD
