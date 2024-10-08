@@ -557,7 +557,7 @@ namespace algoim
         }
 
         // Evaluate an integral applied to a given functional
-        template<typename F, typename R = typename std::result_of<F(const uvector<real,N>&)>::type>
+        template<typename F, typename R = typename std::invoke_result<F(const uvector<real,N>&)>::type>
         R operator()(const F& f) const
         {
             R sum = 0;
@@ -649,7 +649,7 @@ namespace algoim
             hyperrectangle, i.e., {phi < 0}, intersected with xrange, intersected with the face
             {x(dim) == xrange(side)(dim)}.
        - side is used only when 0 <= dim && dim < N and specifies which side of the hyperrectangle to restrict
-         to, either side == 0 or side == 1 for the “left” or “right” face, respectively (with normal pointing
+         to, either side == 0 or side == 1 for the ï¿½leftï¿½ or ï¿½rightï¿½ face, respectively (with normal pointing
          in the direction of the dim-th axis).
        - qo specifies the degree of the underlying one-dimensional Gaussian quadrature scheme and must satisfy
          1 <= qo && qo <= 10.
