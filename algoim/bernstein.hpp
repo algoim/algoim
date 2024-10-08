@@ -15,16 +15,7 @@
 #include "sparkstack.hpp"
 #include "binomial.hpp"
 #include "utility.hpp"
-
-// Some methods rely on a LAPACK implementation to solve
-// generalised eigenvalue problems and SVD factorisation
-#if __has_include(<lapacke.h>)
-#include <lapacke.h>
-#elif __has_include(<mkl_lapacke.h>)
-#include <mkl_lapacke.h>
-#else
-#error "Algoim requires a LAPACKE implementation to compute eigenvalues and SVD factorisations, but a suitable lapacke.h include file was not found; did you forget to specify its include path?"
-#endif
+#include "eig_utils.hpp"
 
 namespace algoim::bernstein
 {
@@ -598,8 +589,8 @@ namespace algoim::bernstein
                 return SVD{base, base + P*P, base + 2*P*P};
             }
 
-            real *A, *superb, *basis;
-            algoim_spark_alloc(real, &A, P*P, &superb, P, &basis, P);
+            real *A, *basis;
+            algoim_spark_alloc(real, &A, P*P, &basis, P);
             for (int i = 0; i < P; ++i)
             {
                 evalBernsteinBasis(modifiedChebyshevNode(i, P), P, basis);
@@ -611,9 +602,8 @@ namespace algoim::bernstein
             real *base = cache[P].data();
             SVD result{base, base + P*P, base + 2*P*P};
 
-            static_assert(std::is_same_v<real, double>, "Algoim's default LAPACK code assumes real == double; a custom SVD solver is required when real != double");
-            int info = LAPACKE_dgesvd(LAPACK_ROW_MAJOR, 'A', 'A', P, P, A, P, result.sigma, result.U, P, result.Vt, P, superb);
-            assert(info == 0 && "LAPACKE_dgesvd call failed (algoim::bernstein::BernsteinVandermondeSVD::get)");
+            computeSVD(A, P, P, result.U, result.sigma, result.Vt);
+
             return result;
         }
     };
@@ -681,67 +671,6 @@ namespace algoim::bernstein
         bernsteinInterpolate(ff, std::pow(100.0 * std::numeric_limits<real>::epsilon(), 1.0 / N), out);
     }
 
-    namespace detail
-    {
-        // Compute the generalised eigenvalues for matrix pair A, B
-        //   in: N by N square matrices; A, B will be overwritten
-        //   out: array of length N x 2
-        void generalisedEigenvalues(xarray<real,2>& A, xarray<real,2>& B, xarray<real,2>& out)
-        {
-            int N = A.ext(0);
-            assert(all(A.ext() == N) && all(B.ext() == N) && out.ext(0) == N && out.ext(1) == 2);
-            real *alphar, *alphai, *beta, *lscale, *rscale;
-            algoim_spark_alloc(real, &alphar, N, &alphai, N, &beta, N, &lscale, N, &rscale, N);
-            real abnrm, bbnrm;
-            int ilo, ihi;
-            static_assert(std::is_same_v<real, double>, "Algoim's default LAPACK code assumes real == double; a custom generalised eigenvalue solver is required when real != double");
-            int info = LAPACKE_dggevx(LAPACK_ROW_MAJOR, 'B', 'N', 'N', 'N', N, A.data(), N, B.data(), N, alphar, alphai, beta, nullptr, N, nullptr, N, &ilo, &ihi, lscale, rscale, &abnrm, &bbnrm, nullptr, nullptr);
-            assert(info == 0 && "LAPACKE_dggevx call failed (algoim::bernstein::detail::generalisedEigenvalues)");
-            for (int i = 0; i < N; ++i)
-            {
-                if (beta[i] != 0.0)
-                    out(i,0) = alphar[i] / beta[i],
-                    out(i,1) = alphai[i] / beta[i];
-                else
-                    out(i,0) = out(i,1) = std::numeric_limits<real>::infinity();
-            }
-        }
-    } // namespace detail
-
-    // Compute all complex  roots of a Bernstein polynomial
-    //   alpha: array of length P
-    //   out: array of length (P-1) x 2
-    void rootsBernsteinPoly(const real* alpha, int P, xarray<real,2>& out)
-    {
-        assert(P >= 2 && out.ext(0) == P - 1 && out.ext(1) == 2);
-        using std::max;
-        using std::abs;
-
-        real *beta;
-        algoim_spark_alloc(real, &beta, P);
-        real tol = 0.0;
-        for (int i = 0; i < P; ++i)
-            tol = max(tol, abs(alpha[i]));
-        tol *= util::sqr(std::numeric_limits<real>::epsilon());
-        for (int i = 0; i < P; ++i)
-            beta[i] = (abs(alpha[i]) > tol) ? alpha[i] : 0;
-
-        int N = P - 1;
-        xarray<real,2> A(nullptr, uvector<int,2>{N, N});
-        xarray<real,2> B(nullptr, uvector<int,2>{N, N});
-        algoim_spark_alloc(real, A, B);
-        A = 0;
-        B = 0;
-        for (int i = 0; i < N - 1; ++i)
-            A(i, i + 1) = B(i, i + 1) = 1.0;
-        for (int i = 0; i < N; ++i)
-            A(N - 1, i) = B(N - 1, i) = -beta[i];
-        B(N - 1, N - 1) += beta[N] / N;
-        for (int i = 0; i < N - 1; ++i)
-            B(i, i) = real(N - i) / real(i + 1);
-
-        detail::generalisedEigenvalues(A, B, out);
-    }
 
     namespace detail
     {
