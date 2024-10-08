@@ -69,6 +69,8 @@ namespace algoim
         T* ptr;
         int len;
 
+        xarraySlice(T *ptr, int len) : ptr(ptr), len(len){};
+
         xarraySlice(xarraySlice&) = delete;
         xarraySlice(xarraySlice&&) = delete;
 
